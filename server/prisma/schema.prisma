@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens  RefreshToken[]
+  gamesAsPlayer1 TicTacToeGame[] @relation("Player1Games")
+  gamesAsPlayer2 TicTacToeGame[] @relation("Player2Games")
+  ticTacToeMoves TicTacToeMove[]
+  line98Games    Line98Game[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) // Mối quan hệ
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TicTacToePlayerSymbol {
+  X
+  O
+}
+
+enum TicTacToeGameStatus {
+  WAITING_FOR_PLAYER
+  IN_PROGRESS
+  FINISHED
+  ABORTED // Trò chơi bị hủy bỏ (ví dụ: một người chơi rời đi)
+}
+
+model TicTacToeGame {
+  id                  String                 @id @default(uuid())
+  player1Id           String
+  player1             User                   @relation("Player1Games", fields: [player1Id], references: [id])
+  player1Symbol       TicTacToePlayerSymbol? // Add this
+  player2Id           String? // Player 2 có thể null khi đang chờ
+  player2             User?                  @relation("Player2Games", fields: [player2Id], references: [id])
+  player2Symbol       TicTacToePlayerSymbol? // Add this
+  currentPlayerSymbol TicTacToePlayerSymbol? // Lượt của ai (X hoặc O)
+  status              TicTacToeGameStatus    @default(WAITING_FOR_PLAYER)
+  winnerSymbol        TicTacToePlayerSymbol? // Ai thắng (X hoặc O), null nếu hòa hoặc chưa kết thúc
+  boardState          String // Trạng thái bàn cờ, ví dụ "---------"
+  moves               TicTacToeMove[]
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+}
+
+model TicTacToeMove {
+  id           String                @id @default(uuid())
+  gameId       String
+  game         TicTacToeGame         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId       String // Ai là người thực hiện nước đi này
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerSymbol TicTacToePlayerSymbol
+  position     Int // Vị trí trên bàn cờ (0-8)
+  createdAt    DateTime              @default(now())
+}
+
+enum Line98GameStatus {
+  IN_PROGRESS
+  FINISHED
+}
+
+model Line98Game {
+  id         String           @id @default(uuid())
+  userId     String // Người chơi của game này
+  user       User             @relation(fields: [userId], references: [id])
+  boardState String // Chuỗi đại diện cho trạng thái bàn cờ (81 ký tự cho 9x9)
+  nextBalls  String // Chuỗi đại diện cho các quả bóng sẽ xuất hiện tiếp theo (3 ký tự)
+  status     Line98GameStatus @default(IN_PROGRESS)
+  score      Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+}
