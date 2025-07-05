@@ -83,7 +83,7 @@ NEXT_PUBLIC_WS_BASE_URL=http://localhost:3001
 
 You can now start both the client and server concurrently.
 
-### Start Backend Server
+### Start Server
 
 From the `server/` directory:
 
@@ -94,7 +94,7 @@ npm run start:dev # or yarn start:dev
 The server should be running at:  
 📍 `http://localhost:3001`
 
-### Start Frontend Client
+### Start Client
 
 From the `client/` directory:
 
