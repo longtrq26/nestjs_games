@@ -1,16 +1,16 @@
-// src/lib/redux/slices/authSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 interface AuthState {
   user: { id: string; username: string } | null;
   accessToken: string | null;
-  // isAuthenticated chỉ là true khi user data được tải thành công từ token
+  refreshToken: string | null;
   isAuthenticated: boolean;
 }
 
 const initialState: AuthState = {
   user: null,
   accessToken: null,
+  refreshToken: null,
   isAuthenticated: false,
 };
 
@@ -18,20 +18,22 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    // Action để thiết lập user và token sau khi đăng nhập thành công
+    // Thiết lập user và token sau khi đăng nhập thành công
     setAuthCredentials(
       state,
       action: PayloadAction<{
         user: { id: string; username: string };
         accessToken: string;
+        refreshToken: string;
       }>
     ) {
       state.user = action.payload.user;
       state.accessToken = action.payload.accessToken;
-      state.isAuthenticated = true; // Đăng nhập thành công, nên xác thực là true
+      state.refreshToken = action.payload.refreshToken;
+      state.isAuthenticated = true;
     },
 
-    // Action để xóa thông tin xác thực khi đăng xuất
+    // Xóa thông tin xác thực khi đăng xuất
     logout(state) {
       state.user = null;
       state.accessToken = null;
@@ -45,7 +47,7 @@ const authSlice = createSlice({
       // state.isAuthenticated vẫn là false cho đến khi server xác minh token
     },
 
-    // Action này được gọi khi THÔNG TIN USER được tải thành công từ server (qua useGetMeQuery)
+    // Gọi khi user info được tải thành công từ server
     setUserAndAuthenticate(
       state,
       action: PayloadAction<{ id: string; username: string } | null>

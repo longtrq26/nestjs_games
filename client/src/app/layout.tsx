@@ -1,8 +1,8 @@
+import { ReduxProvider } from "@/state/redux/providers";
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
-import "./globals.css";
-import { ReduxProvider } from "@/state/redux/providers";
 import { Toaster } from "sonner";
+import "./globals.css";
 
 const lato = Lato({
   variable: "--font-lato",
