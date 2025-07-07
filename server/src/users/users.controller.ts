@@ -5,16 +5,12 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { UsersService } from './users.service';
+import { CurrentUser } from 'src/lib/decorators/current-user.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-interface AuthenticatedRequest extends Request {
-  user: { userId: string; username: string };
-}
+import { UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -23,18 +19,18 @@ export class UsersController {
 
   @Get('me')
   @HttpCode(HttpStatus.OK)
-  async getMyProfile(@Req() req: AuthenticatedRequest) {
-    // Lấy userId từ đối tượng user đã được JwtAuthGuard gắn vào req
-    return this.usersService.findOneById(req.user.userId);
+  async getMyProfile(
+    @CurrentUser() user: { userId: string; username: string },
+  ) {
+    return this.usersService.findOneById(user.userId);
   }
 
   @Patch('me')
   @HttpCode(HttpStatus.OK)
   async updateMyProfile(
-    @Req() req: AuthenticatedRequest,
+    @CurrentUser() user: { userId: string; username: string },
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    // Lấy userId từ đối tượng user đã được JwtAuthGuard gắn vào req
-    return this.usersService.update(req.user.userId, updateUserDto);
+    return this.usersService.update(user.userId, updateUserDto);
   }
 }

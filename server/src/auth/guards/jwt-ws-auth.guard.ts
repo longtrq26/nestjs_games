@@ -1,20 +1,12 @@
-// src/auth/guards/jwt-ws-auth.guard.ts (thêm logs để debug)
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-  Logger,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../strategies/jwt.strategy';
 
 @Injectable()
 export class JwtWsAuthGuard implements CanActivate {
-  private readonly logger = new Logger(JwtWsAuthGuard.name); // Thêm logger
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
@@ -22,29 +14,17 @@ export class JwtWsAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const client: any = context.switchToWs().getClient();
-    const headers = client.handshake.headers;
-    const query = client.handshake.query;
-
-    let token: string | undefined = client.handshake.auth?.token;
-
-    if (headers.authorization && headers.authorization.startsWith('Bearer ')) {
-      token = headers.authorization.split(' ')[1];
-    } else if (query.token) {
-      token = Array.isArray(query.token) ? query.token[0] : query.token;
-    }
+    const client = context.switchToWs().getClient();
+    const token = this.extractTokenFromHandshake(client);
 
     if (!token) {
-      this.logger.warn('No token provided for WebSocket connection.');
-      throw new WsException('Unauthorized - No token provided');
+      throw new WsException('Unauthorized - Missing token');
     }
 
     try {
-      this.logger.debug(`Attempting to verify token: ${token}`);
-      const payload: JwtPayload = this.jwtService.verify(token, {
+      const payload = this.jwtService.verify<JwtPayload>(token, {
         secret: this.configService.get<string>('jwt.accessTokenSecret'),
       });
-      this.logger.debug(`Token verified, payload: ${JSON.stringify(payload)}`);
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -52,24 +32,36 @@ export class JwtWsAuthGuard implements CanActivate {
       });
 
       if (!user) {
-        this.logger.warn(`User with ID ${payload.sub} not found in DB.`);
         throw new WsException('Unauthorized - User not found');
       }
 
+      // Attach user vào socket
       client.data.user = user;
-      this.logger.log(
-        `WebSocket connection authenticated for user: ${user.username} (ID: ${user.id})`,
-      );
       return true;
     } catch (error) {
-      this.logger.error(
-        `WebSocket authentication error: ${error.message}`,
-        error.stack,
-      );
       if (error.name === 'TokenExpiredError') {
-        throw new WsException('Unauthorized - Access token expired');
+        throw new WsException('Unauthorized - Token expired');
       }
       throw new WsException('Unauthorized - Invalid token');
     }
+  }
+
+  // auth > headers > query
+  private extractTokenFromHandshake(client: any): string | undefined {
+    const authToken = client.handshake.auth?.token;
+    const headerAuth = client.handshake.headers?.authorization;
+    const queryToken = client.handshake.query?.token;
+
+    if (authToken) return authToken;
+
+    if (headerAuth?.startsWith('Bearer ')) {
+      return headerAuth.split(' ')[1];
+    }
+
+    if (Array.isArray(queryToken)) {
+      return queryToken[0];
+    }
+
+    return queryToken;
   }
 }

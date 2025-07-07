@@ -5,9 +5,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { compare, hash } from 'bcrypt';
+import { createHash, randomBytes } from 'crypto';
+import ms from 'ms';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
-import { hash, compare } from 'bcrypt';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +22,7 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<{ message: string }> {
     const { username, password } = registerDto;
 
+    // Kiểm tra existing username
     const existingUser = await this.prisma.user.findUnique({
       where: { username },
     });
@@ -28,11 +31,13 @@ export class AuthService {
       throw new BadRequestException('Username already exists');
     }
 
+    // Hash password
     const hashedPassword = await hash(password, 10);
 
+    // Tạo user mới trong database
     await this.prisma.user.create({
       data: {
-        username,
+        username: username.toLowerCase().trim(),
         password: hashedPassword,
       },
     });
@@ -47,6 +52,7 @@ export class AuthService {
   }> {
     const { username, password } = loginDto;
 
+    // Tìm user
     const user = await this.prisma.user.findUnique({
       where: { username },
     });
@@ -55,16 +61,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Kiểm tra password
     const isPasswordValid = await compare(password, user.password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Tạo JWT payload
+    // Tạo payload
     const payload = { sub: user.id, username: user.username };
 
-    // Tạo Access Token
+    // Tạo access token
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('jwt.accessTokenSecret'),
       expiresIn: this.configService.get<string>(
@@ -72,26 +79,24 @@ export class AuthService {
       ),
     });
 
-    // Tạo Refresh Token
-    const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('jwt.refreshTokenSecret'),
-      expiresIn: this.configService.get<string>(
-        'jwt.refreshTokenExpirationTime',
-      ),
-    });
+    // Tạo refresh token
+    const refreshToken = randomBytes(64).toString('hex');
 
-    // Lưu Refresh Token vào DB
+    const hashedToken = createHash('sha256').update(refreshToken).digest('hex');
+
     const refreshTokenExpirationTime =
       this.configService.get<string>('jwt.refreshTokenExpirationTime') ?? '7d';
+
     const expiresAt = new Date(
-      Date.now() + this.parseJwtExpiration(refreshTokenExpirationTime),
+      Date.now() + ms(refreshTokenExpirationTime as any),
     );
 
+    // Lưu hashed token vào DB
     await this.prisma.refreshToken.create({
       data: {
-        token: refreshToken,
+        token: hashedToken,
         userId: user.id,
-        expiresAt: expiresAt,
+        expiresAt,
       },
     });
 
@@ -102,20 +107,18 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(refreshToken: string): Promise<{
+  async refreshToken(refreshToken: string): Promise<{
     accessToken: string;
     refreshToken: string;
     user: { id: string; username: string };
   }> {
     try {
-      // Xác thực refresh token
-      const decoded = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('jwt.refreshTokenSecret'),
-      });
+      // Hash refresh token nhận từ client
+      const hashed = createHash('sha256').update(refreshToken).digest('hex');
 
-      // Kiểm tra xem refresh token có tồn tại trong DB và chưa hết hạn không
+      // Kiểm tra token trong database
       const storedToken = await this.prisma.refreshToken.findUnique({
-        where: { token: refreshToken },
+        where: { token: hashed },
         include: { user: true },
       });
 
@@ -127,15 +130,12 @@ export class AuthService {
         throw new UnauthorizedException('Invalid or expired refresh token');
       }
 
-      // Xóa refresh token cũ khỏi DB (để đảm bảo refresh token chỉ được dùng 1 lần)
-      await this.prisma.refreshToken.delete({
-        where: { id: storedToken.id },
-      });
+      const user = storedToken.user;
 
-      // Tạo cặp token mới
+      // Tạo access token mới
       const newPayload = {
-        sub: storedToken.user.id,
-        username: storedToken.user.username,
+        sub: user.id,
+        username: user.username,
       };
 
       const newAccessToken = this.jwtService.sign(newPayload, {
@@ -145,51 +145,55 @@ export class AuthService {
         ),
       });
 
-      const newRefreshToken = this.jwtService.sign(newPayload, {
-        secret: this.configService.get<string>('jwt.refreshTokenSecret'),
-        expiresIn: this.configService.get<string>(
-          'jwt.refreshTokenExpirationTime',
-        ),
-      });
+      // Tạo refresh token mới
+      const newRefreshToken = randomBytes(64).toString('hex');
 
-      // Lưu refresh token mới vào DB
+      const hashedNewToken = createHash('sha256')
+        .update(newRefreshToken)
+        .digest('hex');
+
       const refreshTokenExpirationTime =
         this.configService.get<string>('jwt.refreshTokenExpirationTime') ??
         '7d';
+
       const expiresAt = new Date(
-        Date.now() + this.parseJwtExpiration(refreshTokenExpirationTime),
+        Date.now() + ms(refreshTokenExpirationTime as any),
       );
 
-      await this.prisma.refreshToken.create({
-        data: {
-          token: newRefreshToken,
-          userId: storedToken.user.id,
-          expiresAt: expiresAt,
-        },
-      });
+      // Xóa token cũ + tạo token mới
+      await this.prisma.$transaction([
+        this.prisma.refreshToken.delete({
+          where: { id: storedToken.id },
+        }),
+        this.prisma.refreshToken.create({
+          data: {
+            token: hashedNewToken,
+            userId: user.id,
+            expiresAt,
+          },
+        }),
+      ]);
 
       return {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
-        user: { id: storedToken.user.id, username: storedToken.user.username },
+        user: {
+          id: user.id,
+          username: user.username,
+        },
       };
     } catch (error) {
-      // Xử lý các lỗi JWT (ví dụ: TokenExpiredError, JsonWebTokenError)
-      if (error.name === 'TokenExpiredError') {
-        // Nếu refresh token đã hết hạn, xóa nó khỏi DB nếu có
-        await this.prisma.refreshToken.deleteMany({
-          where: { token: refreshToken },
-        });
-        throw new UnauthorizedException('Refresh token expired');
-      }
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
 
   async logout(refreshToken: string): Promise<{ message: string }> {
-    // Xóa refresh token khỏi DB để vô hiệu hóa
+    // Hash token client gửi
+    const hashedToken = createHash('sha256').update(refreshToken).digest('hex');
+
+    // Xoá token khỏi database để vô hiệu hoá
     const result = await this.prisma.refreshToken.deleteMany({
-      where: { token: refreshToken },
+      where: { token: hashedToken },
     });
 
     if (result.count === 0) {
@@ -199,23 +203,5 @@ export class AuthService {
     }
 
     return { message: 'Logged out successfully' };
-  }
-
-  private parseJwtExpiration(expiration: string): number {
-    const unit = expiration.slice(-1);
-    const value = parseInt(expiration.slice(0, -1));
-
-    switch (unit) {
-      case 's':
-        return value * 1000;
-      case 'm':
-        return value * 60 * 1000;
-      case 'h':
-        return value * 60 * 60 * 1000;
-      case 'd':
-        return value * 24 * 60 * 60 * 1000;
-      default:
-        return parseInt(expiration);
-    }
   }
 }

@@ -1,16 +1,27 @@
 import { Module } from '@nestjs/common';
-import { PrismaService } from './prisma/prisma.service';
-import { AuthModule } from './auth/auth.module';
-import { AppConfigModule } from './config/config.module';
-import { JwtStrategy } from './auth/strategies/jwt.strategy';
+import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
-import { UsersModule } from './users/users.module';
-import { TicTacToeModule } from './tic-tac-toe/tic-tac-toe.module';
+import { JwtStrategy } from './auth/strategies/jwt.strategy';
+import Configuration from './config';
 import { Line98Module } from './line98/line98.module';
+import { PrismaService } from './prisma/prisma.service';
+import { TicTacToeModule } from './tic-tac-toe/tic-tac-toe.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [AppConfigModule, AuthModule, UsersModule, TicTacToeModule, Line98Module],
+  imports: [
+    ConfigModule.forRoot({
+      load: [Configuration],
+      isGlobal: true,
+    }),
+
+    AuthModule,
+    UsersModule,
+    TicTacToeModule,
+    Line98Module,
+  ],
   controllers: [],
   providers: [
     PrismaService,
