@@ -5,36 +5,48 @@ import {
 } from '@nestjs/common';
 import { Line98Game, Line98GameStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+
 import {
   BALL_COLORS,
   BOARD_SIZE,
+  EMPTY_CELL,
   INITIAL_BALLS,
   MIN_LINE_TO_CLEAR,
   NEW_BALLS_PER_TURN,
   TOTAL_CELLS,
-} from './constants';
-import { Line98GameStatePayload } from './dto/line98.dto';
-import { BoardCell, GameBoard, HintMove, Path } from './types';
+} from 'src/lib/constants';
+import {
+  BoardCell,
+  GameBoard,
+  HintMove,
+  Line98GameStatePayload,
+  Path,
+} from 'src/lib/types';
 
 @Injectable()
 export class Line98Service {
   constructor(private prisma: PrismaService) {}
 
   async createGame(userId: string): Promise<Line98Game> {
-    const initialBoard = Array(TOTAL_CELLS).fill('-');
-    this.placeRandomBalls(initialBoard, INITIAL_BALLS); // Đặt bóng ban đầu
+    // Khởi tạo board rỗng
+    const initialBoard: GameBoard = Array(TOTAL_CELLS).fill(EMPTY_CELL);
 
-    const newNextBalls = this.generateRandomBalls(NEW_BALLS_PER_TURN); // Tạo bóng tiếp theo
+    // Đặt random 5 bóng khởi đầu
+    this.placeRandomBalls(initialBoard, INITIAL_BALLS);
+
+    // Tạo 3 bóng tiếp theo
+    const nextBalls: BoardCell[] = this.generateRandomBalls(NEW_BALLS_PER_TURN);
 
     const newGame = await this.prisma.line98Game.create({
       data: {
-        userId: userId,
+        userId,
         boardState: initialBoard.join(''),
-        nextBalls: newNextBalls.join(''),
+        nextBalls: nextBalls.join(''),
         status: Line98GameStatus.IN_PROGRESS,
         score: 0,
       },
     });
+
     return newGame;
   }
 
@@ -47,13 +59,7 @@ export class Line98Service {
       throw new NotFoundException('Game not found.');
     }
 
-    return {
-      gameId: game.id,
-      boardState: game.boardState.split(''),
-      nextBalls: game.nextBalls.split(''),
-      score: game.score,
-      status: game.status,
-    };
+    return this.toGameStatePayload(game);
   }
 
   async moveBall(
@@ -62,197 +68,120 @@ export class Line98Service {
     from: number,
     to: number,
   ): Promise<Line98GameStatePayload> {
-    const game = await this.prisma.line98Game.findUnique({
-      where: { id: gameId },
-    });
-
-    if (!game) {
-      throw new NotFoundException('Game not found.');
-    }
-    if (game.userId !== userId) {
-      throw new BadRequestException('You are not the player of this game.');
-    }
-    if (game.status === Line98GameStatus.FINISHED) {
-      throw new BadRequestException('Game is already finished.');
-    }
-
-    let board: GameBoard = game.boardState.split('');
+    const game = await this.findValidGame(gameId, userId);
+    const board = game.boardState.split('');
     const ballColor = board[from];
 
-    if (ballColor === '-') {
-      throw new BadRequestException('No ball at starting position.');
-    }
-    if (board[to] !== '-') {
-      throw new BadRequestException('Destination position is not empty.');
-    }
+    if (ballColor === EMPTY_CELL)
+      throw new BadRequestException('Không có bóng ở vị trí bắt đầu.');
+    if (board[to] !== EMPTY_CELL)
+      throw new BadRequestException('Ô đích không trống.');
 
-    // 1. Tìm đường đi ngắn nhất
     const path = this.findPath(board, from, to);
-    if (!path) {
-      throw new BadRequestException('No valid path found to destination.');
-    }
+    if (!path) throw new BadRequestException('Không tìm thấy đường đi hợp lệ.');
 
-    // 2. Thực hiện di chuyển trên bàn cờ
+    // Move
     board[to] = ballColor;
-    board[from] = '-';
+    board[from] = EMPTY_CELL;
 
-    let currentScore = game.score;
-    let clearedBallsCount = 0;
+    let score = game.score;
+    let nextBalls = game.nextBalls;
 
-    // 3. Kiểm tra và loại bỏ các đường thẳng
-    const { clearedBoard, clearedCount } = this.clearLines(board);
-    board = clearedBoard;
-    clearedBallsCount = clearedCount;
+    // Xử lý bóng nổ sau khi move
+    const clearResultAfterMove = this.clearLines(board);
+    let updatedBoard = clearResultAfterMove.clearedBoard;
+    score += clearResultAfterMove.clearedCount;
 
-    if (clearedBallsCount > 0) {
-      currentScore += clearedBallsCount; // Tăng điểm
-      // Nếu có bóng nổ, không sinh bóng mới
-    } else {
-      // 4. Sinh bóng mới nếu không có bóng nào được nổ
-      const nextBallsColors = game.nextBalls.split('');
-      const emptyCells = this.getEmptyCells(board);
+    // Nếu không có bóng nổ, spawn bóng mới
+    if (clearResultAfterMove.clearedCount === 0) {
+      const nextBallsList = nextBalls.split('');
+      const emptyCells = this.getEmptyCells(updatedBoard);
 
-      if (emptyCells.length < nextBallsColors.length) {
-        // Hết ô trống, game over
-        await this.prisma.line98Game.update({
-          where: { id: gameId },
-          data: {
-            status: Line98GameStatus.FINISHED,
-            boardState: board.join(''),
-            score: currentScore,
-          },
-        });
-        throw new BadRequestException('No more empty cells. Game Over!');
+      if (emptyCells.length < nextBallsList.length) {
+        throw new BadRequestException('Hết chỗ trống. Game Over!');
       }
 
-      this.placeSpecificBalls(board, nextBallsColors);
-      const { clearedBoard: newClearedBoard, clearedCount: newClearedCount } =
-        this.clearLines(board);
-      board = newClearedBoard;
-      currentScore += newClearedCount;
+      this.placeSpecificBalls(updatedBoard, nextBallsList);
 
-      // Sinh 3 bóng tiếp theo cho lượt sau
-      game.nextBalls = this.generateRandomBalls(NEW_BALLS_PER_TURN).join('');
+      // Kiểm tra lại nổ sau khi sinh
+      const clearResultAfterSpawn = this.clearLines(updatedBoard);
+      updatedBoard = clearResultAfterSpawn.clearedBoard;
+      score += clearResultAfterSpawn.clearedCount;
+
+      // Tạo bóng tiếp theo
+      nextBalls = this.generateRandomBalls(NEW_BALLS_PER_TURN).join('');
     }
 
-    // 5. Kiểm tra Game Over (sau khi sinh bóng và dọn dẹp)
-    if (
-      this.getEmptyCells(board).length === 0 &&
-      this.clearLines(board).clearedCount === 0
-    ) {
-      game.status = Line98GameStatus.FINISHED;
+    const emptyCellsAfterAll = this.getEmptyCells(updatedBoard);
+    const hasMoreMoves = this.clearLines(updatedBoard).clearedCount > 0;
+
+    if (emptyCellsAfterAll.length === 0 && !hasMoreMoves) {
       throw new BadRequestException(
-        'Board is full and no lines can be cleared. Game Over!',
+        'Board đầy và không còn đường để ghi điểm. Game Over!',
       );
     }
 
-    // 6. Cập nhật trạng thái game vào DB
     const updatedGame = await this.prisma.line98Game.update({
       where: { id: gameId },
       data: {
-        boardState: board.join(''),
-        nextBalls: game.nextBalls,
-        score: currentScore,
-        status: game.status,
+        boardState: updatedBoard.join(''),
+        nextBalls,
+        score,
+        status: Line98GameStatus.IN_PROGRESS,
       },
     });
 
-    return {
-      gameId: updatedGame.id,
-      boardState: updatedGame.boardState.split(''),
-      nextBalls: updatedGame.nextBalls.split(''),
-      score: updatedGame.score,
-      status: updatedGame.status,
-    };
+    return this.toGameStatePayload(updatedGame);
   }
 
   async getHint(gameId: string, userId: string): Promise<HintMove | null> {
-    const game = await this.prisma.line98Game.findUnique({
-      where: { id: gameId },
-    });
+    const game = await this.findValidGame(gameId, userId);
 
-    if (!game) {
-      throw new NotFoundException('Game not found.');
-    }
-    if (game.userId !== userId) {
-      throw new BadRequestException('You are not the player of this game.');
-    }
     if (game.status === Line98GameStatus.FINISHED) {
       return null; // Không có gợi ý nếu game đã kết thúc
     }
 
     const board: GameBoard = game.boardState.split('');
     const nextBalls = game.nextBalls.split('');
-    const currentScore = game.score;
-
     const possibleMoves: HintMove[] = [];
 
     for (let from = 0; from < TOTAL_CELLS; from++) {
-      if (board[from] === '-') continue; // Không có bóng để di chuyển
+      if (board[from] === EMPTY_CELL) continue;
 
       for (let to = 0; to < TOTAL_CELLS; to++) {
-        if (board[to] !== '-') continue; // Vị trí đích phải trống
+        if (board[to] !== EMPTY_CELL) continue;
 
         const path = this.findPath(board, from, to);
-        if (!path) continue; // Không có đường đi hợp lệ
+        if (!path) continue;
 
-        // Giả lập di chuyển để kiểm tra
-        const tempBoard = [...board];
-        tempBoard[to] = tempBoard[from];
-        tempBoard[from] = '-';
+        const simulatedMove = this.simulateMove(board, from, to);
 
-        // 1. Ưu tiên: Nổ một dãy ngay lập tức (loại 'clear')
-        const { clearedCount } = this.clearLines(tempBoard);
-        if (clearedCount >= MIN_LINE_TO_CLEAR) {
+        const clearScore = this.evaluateImmediateClear(simulatedMove);
+        if (clearScore) {
           possibleMoves.push({
             from,
             to,
-            score: clearedCount * 100,
+            score: clearScore,
             type: 'clear',
-          }); // Điểm cao cho nổ
-        } else {
-          // 2. Ưu tiên thứ hai: Có cơ hội tạo thành một dãy (loại 'potential_line')
-          // Kiểm tra xem sau khi di chuyển, và sau khi sinh bóng mới, có thể tạo thành một đường không.
-          // Đây là phần rất phức tạp của AI, đòi hỏi tìm kiếm sâu.
-          // Để đơn giản hóa cho MVP, chúng ta sẽ chỉ kiểm tra xem di chuyển này có mở ra không gian cho các nước đi tương lai không.
-          // Một cách đơn giản là kiểm tra nếu nó tạo ra một đường gần đầy đủ (4 bóng)
-          const potentialBoard = [...tempBoard];
-          // Giả lập sinh bóng tiếp theo
-          const emptyCellsAfterMove = this.getEmptyCells(potentialBoard);
-          if (emptyCellsAfterMove.length >= nextBalls.length) {
-            const tempBoardAfterNextBalls = [...potentialBoard];
-            const randomEmptyCells = this.getRandomEmptyCells(
-              tempBoardAfterNextBalls,
-              nextBalls.length,
-            );
-            for (let i = 0; i < nextBalls.length; i++) {
-              tempBoardAfterNextBalls[randomEmptyCells[i]] = nextBalls[i];
-            }
-
-            const potentialLines = this.findPotentialLines(
-              tempBoardAfterNextBalls,
-            );
-            if (potentialLines > 0) {
-              possibleMoves.push({
-                from,
-                to,
-                score: potentialLines * 10,
-                type: 'potential_line',
-              }); // Điểm trung bình
-            } else {
-              // 3. Ưu tiên thứ ba: Chỉ có thể di chuyển (loại 'movable')
-              possibleMoves.push({ from, to, score: 1, type: 'movable' }); // Điểm thấp
-            }
-          } else {
-            possibleMoves.push({ from, to, score: 1, type: 'movable' }); // Vẫn là movable nếu không đủ chỗ cho bóng mới
-          }
+          });
+          continue;
         }
+
+        const potentialScore = this.evaluatePotentialLine(
+          simulatedMove,
+          nextBalls,
+        );
+        possibleMoves.push({
+          from,
+          to,
+          score: potentialScore,
+          type: potentialScore > 1 ? 'potential_line' : 'movable',
+        });
       }
     }
 
-    // Sắp xếp gợi ý theo điểm số giảm dần
+    // Trả về gợi ý có điểm cao nhất
     possibleMoves.sort((a, b) => b.score - a.score);
-
     return possibleMoves.length > 0 ? possibleMoves[0] : null;
   }
 
@@ -269,10 +198,12 @@ export class Line98Service {
     const emptyCells = this.getEmptyCells(board);
     const ballsToPlace = this.generateRandomBalls(count);
 
+    // Xáo trộn mảng emptyCells để chọn ngẫu nhiên các vị trí
+    this.shuffleArray(emptyCells);
+
     for (let i = 0; i < ballsToPlace.length; i++) {
-      if (emptyCells.length === 0) break;
-      const randomIndex = Math.floor(Math.random() * emptyCells.length);
-      const position = emptyCells.splice(randomIndex, 1)[0];
+      if (i >= emptyCells.length) break; // Đảm bảo không vượt quá số ô trống
+      const position = emptyCells[i];
       board[position] = ballsToPlace[i];
     }
   }
@@ -280,16 +211,17 @@ export class Line98Service {
   private placeSpecificBalls(board: GameBoard, balls: BoardCell[]): void {
     const emptyCells = this.getEmptyCells(board);
 
+    // Không cần xử lý game over ở đây, đã xử lý trong moveBall
     if (emptyCells.length < balls.length) {
-      // Xử lý game over nếu không đủ chỗ cho các bóng mới
-      // Điều này sẽ được xử lý lại ở hàm moveBall
-      console.warn('Not enough empty cells for new balls. Game might be over.');
+      console.warn('Không đủ ô trống cho bóng mới.');
       return;
     }
 
+    // Xáo trộn mảng emptyCells để chọn ngẫu nhiên các vị trí
+    this.shuffleArray(emptyCells);
+
     for (let i = 0; i < balls.length; i++) {
-      const randomIndex = Math.floor(Math.random() * emptyCells.length);
-      const position = emptyCells.splice(randomIndex, 1)[0];
+      const position = emptyCells[i]; // Lấy từ mảng đã xáo trộn
       board[position] = balls[i];
     }
   }
@@ -297,17 +229,11 @@ export class Line98Service {
   private getEmptyCells(board: GameBoard): number[] {
     const emptyCells: number[] = [];
     for (let i = 0; i < TOTAL_CELLS; i++) {
-      if (board[i] === '-') {
+      if (board[i] === EMPTY_CELL) {
         emptyCells.push(i);
       }
     }
     return emptyCells;
-  }
-
-  private getRandomEmptyCells(board: GameBoard, count: number): number[] {
-    const emptyCells = this.getEmptyCells(board);
-    const shuffled = emptyCells.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
   }
 
   private findPath(
@@ -333,7 +259,11 @@ export class Line98Service {
       const neighbors = this.getNeighbors(currentIdx);
 
       for (const neighborIdx of neighbors) {
-        if (!visited.has(neighborIdx) && board[neighborIdx] === '-') {
+        // Đường đi hợp lệ nếu ô trống hoặc là ô đích
+        if (
+          !visited.has(neighborIdx) &&
+          (board[neighborIdx] === EMPTY_CELL || neighborIdx === endIdx)
+        ) {
           visited.add(neighborIdx);
           const newPath = [...currentPath, neighborIdx];
 
@@ -344,6 +274,7 @@ export class Line98Service {
         }
       }
     }
+
     return null; // Không tìm thấy đường đi
   }
 
@@ -369,75 +300,69 @@ export class Line98Service {
     clearedCount: number;
   } {
     let currentBoard = [...board];
-    let totalClearedCount = 0;
     let ballsToClear: Set<number> = new Set();
 
     // Duyệt qua từng ô để tìm các đường
     for (let i = 0; i < TOTAL_CELLS; i++) {
       const color = currentBoard[i];
-      if (color === '-') continue;
+      if (color === EMPTY_CELL) continue;
 
       const row = Math.floor(i / BOARD_SIZE);
       const col = i % BOARD_SIZE;
 
       // Kiểm tra ngang
-      this.checkAndAddLine(
+      this.collectLineIndices(
         currentBoard,
-        i,
         color,
         row,
         col,
         0,
         1,
         ballsToClear,
-      ); // Ngang
+      );
       // Kiểm tra dọc
-      this.checkAndAddLine(
+      this.collectLineIndices(
         currentBoard,
-        i,
         color,
         row,
         col,
         1,
         0,
         ballsToClear,
-      ); // Dọc
+      );
       // Kiểm tra chéo phải-xuống
-      this.checkAndAddLine(
+      this.collectLineIndices(
         currentBoard,
-        i,
         color,
         row,
         col,
         1,
         1,
         ballsToClear,
-      ); // Chéo chính
+      );
       // Kiểm tra chéo trái-xuống
-      this.checkAndAddLine(
+      this.collectLineIndices(
         currentBoard,
-        i,
         color,
         row,
         col,
         1,
         -1,
         ballsToClear,
-      ); // Chéo phụ
+      );
     }
 
-    if (ballsToClear.size > 0) {
-      totalClearedCount = ballsToClear.size;
+    const totalClearedCount = ballsToClear.size;
+    if (totalClearedCount > 0) {
       for (const idx of ballsToClear) {
-        currentBoard[idx] = '-'; // Xóa bóng
+        currentBoard[idx] = EMPTY_CELL; // Xóa bóng
       }
     }
     return { clearedBoard: currentBoard, clearedCount: totalClearedCount };
   }
 
-  private checkAndAddLine(
+  private collectLineIndices(
     board: GameBoard,
-    startIdx: number,
     color: BoardCell,
     startRow: number,
     startCol: number,
@@ -445,29 +370,58 @@ export class Line98Service {
     deltaCol: number,
     ballsToClear: Set<number>,
   ) {
+    const fullLine = this.scanLine(
+      board,
+      color,
+      startRow,
+      startCol,
+      deltaRow,
+      deltaCol,
+    );
+
+    if (fullLine.length >= MIN_LINE_TO_CLEAR) {
+      fullLine.forEach((idx) => ballsToClear.add(idx));
+    }
+  }
+
+  private scanLine(
+    board: GameBoard,
+    color: BoardCell,
+    row: number,
+    col: number,
+    deltaRow: number,
+    deltaCol: number,
+  ): number[] {
     const line: number[] = [];
-    // Kiểm tra theo một hướng (ví dụ: sang phải, xuống dưới)
-    for (let i = 0; i < MIN_LINE_TO_CLEAR; i++) {
-      const currentRow = startRow + i * deltaRow;
-      const currentCol = startCol + i * deltaCol;
-      const currentIdx = currentRow * BOARD_SIZE + currentCol;
 
-      if (
-        currentRow >= 0 &&
-        currentRow < BOARD_SIZE &&
-        currentCol >= 0 &&
-        currentCol < BOARD_SIZE &&
-        board[currentIdx] === color
-      ) {
-        line.push(currentIdx);
-      } else {
-        break;
-      }
+    // Đi xuôi
+    for (let i = 0; i < BOARD_SIZE; i++) {
+      const r = row + i * deltaRow;
+      const c = col + i * deltaCol;
+      if (!this.isInBounds(r, c)) break;
+
+      const idx = r * BOARD_SIZE + c;
+      if (board[idx] === color) line.push(idx);
+      else break;
     }
 
-    if (line.length >= MIN_LINE_TO_CLEAR) {
-      line.forEach((idx) => ballsToClear.add(idx));
+    // Đi ngược
+    const reverseLine: number[] = [];
+    for (let i = 1; i < BOARD_SIZE; i++) {
+      const r = row - i * deltaRow;
+      const c = col - i * deltaCol;
+      if (!this.isInBounds(r, c)) break;
+
+      const idx = r * BOARD_SIZE + c;
+      if (board[idx] === color) reverseLine.push(idx);
+      else break;
     }
+
+    return [...reverseLine.reverse(), ...line];
+  }
+
+  private isInBounds(row: number, col: number): boolean {
+    return row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE;
   }
 
   private findPotentialLines(board: GameBoard): number {
@@ -511,5 +465,74 @@ export class Line98Service {
       }
     }
     return potentialLines;
+  }
+
+  private async findValidGame(gameId: string, userId: string) {
+    const game = await this.prisma.line98Game.findUnique({
+      where: { id: gameId },
+    });
+    if (!game) throw new NotFoundException('Không tìm thấy game.');
+    if (game.userId !== userId)
+      throw new BadRequestException('Bạn không phải chủ sở hữu game này.');
+    if (game.status === Line98GameStatus.FINISHED)
+      throw new BadRequestException('Game đã kết thúc.');
+    return game;
+  }
+
+  private toGameStatePayload(game: Line98Game): Line98GameStatePayload {
+    return {
+      gameId: game.id,
+      boardState: game.boardState.split(''),
+      nextBalls: game.nextBalls.split(''),
+      score: game.score,
+      status: game.status,
+    };
+  }
+
+  private simulateMove(board: GameBoard, from: number, to: number): GameBoard {
+    const copy = [...board];
+    copy[to] = copy[from];
+    copy[from] = EMPTY_CELL;
+    return copy;
+  }
+
+  private evaluateImmediateClear(board: GameBoard): number | null {
+    const { clearedCount } = this.clearLines(board);
+    return clearedCount >= MIN_LINE_TO_CLEAR ? clearedCount * 100 : null;
+  }
+
+  private evaluatePotentialLine(
+    board: GameBoard,
+    nextBalls: BoardCell[],
+  ): number {
+    const emptyCells = this.getEmptyCells(board);
+    if (emptyCells.length < nextBalls.length) return 1; // Không đủ chỗ để sinh bóng mới → chỉ là một nước đi "movable"
+
+    const clonedBoard = [...board];
+    const randomPositions = this.getRandomEmptyCells(
+      emptyCells,
+      nextBalls.length,
+    );
+
+    for (let i = 0; i < nextBalls.length; i++) {
+      clonedBoard[randomPositions[i]] = nextBalls[i];
+    }
+
+    const potentialLines = this.findPotentialLines(clonedBoard);
+
+    // Nếu tạo ra được đường gần đủ (ví dụ 4 bóng), thì là 'potential_line'
+    return potentialLines > 0 ? potentialLines * 10 : 1;
+  }
+
+  private shuffleArray<T>(array: T[]): void {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  private getRandomEmptyCells(emptyCells: number[], count: number): number[] {
+    const shuffled = [...emptyCells].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
   }
 }

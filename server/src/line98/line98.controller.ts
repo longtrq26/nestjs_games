@@ -6,21 +6,13 @@ import {
   HttpStatus,
   Param,
   Post,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { CurrentUser } from 'src/lib/decorators/current-user.decorator';
+import { Line98GameStatePayload, Line98Response } from 'src/lib/types';
+import { GetHintDto, MoveBallDto } from './dto/line98.dto';
 import { Line98Service } from './line98.service';
-import {
-  CreateLine98GameDto,
-  GetHintDto,
-  Line98GameStatePayload,
-  MoveBallDto,
-} from './dto/line98.dto';
-
-interface AuthenticatedRequest extends Request {
-  user: { userId: string; username: string };
-}
 
 @UseGuards(JwtAuthGuard)
 @Controller('line98')
@@ -30,59 +22,70 @@ export class Line98Controller {
   @Post('create')
   @HttpCode(HttpStatus.OK)
   async createGame(
-    @Req() req: AuthenticatedRequest,
-    @Body() createGameDto: CreateLine98GameDto,
-  ) {
-    try {
-      const game = await this.line98Service.createGame(req.user.userId);
-      return {
-        message: 'Line 98 game created successfully',
-        gameId: game.id,
-      };
-    } catch (err) {
-      console.error('Failed to create game', err);
-      throw err;
-    }
+    @CurrentUser() user: { userId: string },
+    @Body() _unused: any,
+  ): Promise<Line98Response<{ gameId: string }>> {
+    const game = await this.line98Service.createGame(user.userId);
+
+    return {
+      message: 'Line 98 game created successfully',
+      data: { gameId: game.id },
+    };
   }
 
   @Get(':gameId')
   @HttpCode(HttpStatus.OK)
   async getGameState(
     @Param('gameId') gameId: string,
-  ): Promise<Line98GameStatePayload> {
-    return this.line98Service.getGameState(gameId);
+  ): Promise<Line98Response<Line98GameStatePayload>> {
+    const state = await this.line98Service.getGameState(gameId);
+
+    return {
+      message: 'Game state fetched successfully',
+      data: state,
+    };
   }
 
   @Post('move')
   @HttpCode(HttpStatus.OK)
   async moveBall(
-    @Req() req: AuthenticatedRequest,
+    @CurrentUser() user: { userId: string },
     @Body() moveBallDto: MoveBallDto,
-  ): Promise<Line98GameStatePayload> {
-    return this.line98Service.moveBall(
+  ): Promise<Line98Response<Line98GameStatePayload>> {
+    const state = await this.line98Service.moveBall(
       moveBallDto.gameId,
-      req.user.userId,
+      user.userId,
       moveBallDto.from,
       moveBallDto.to,
     );
+
+    return {
+      message: 'Ball moved successfully',
+      data: state,
+    };
   }
 
   @Post('hint')
   @HttpCode(HttpStatus.OK)
   async getHint(
-    @Req() req: AuthenticatedRequest,
+    @CurrentUser() user: { userId: string },
     @Body() getHintDto: GetHintDto,
-  ) {
+  ): Promise<Line98Response<{ hint: any } | null>> {
     const hint = await this.line98Service.getHint(
       getHintDto.gameId,
-      req.user.userId,
+      user.userId,
     );
+
     if (!hint) {
-      return { message: 'No hint available or game finished.' };
+      return {
+        message: 'No hint available or game finished.',
+        data: null,
+      };
     }
+
     return {
       message: 'Optimal move hint',
-      hint: hint,
+      data: { hint },
     };
   }
 }
