@@ -11,7 +11,7 @@ import {
   resetTicTacToeGame,
   setTicTacToeGame,
 } from "@/state/redux/slices/gameSlice";
-import { AppDispatch, RootState } from "@/state/redux/store";
+import { AppDispatch, RootState } from "@/state/store";
 import React, { useCallback, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";

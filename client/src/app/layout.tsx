@@ -1,4 +1,4 @@
-import { ReduxProvider } from "@/state/redux/providers";
+import { ReduxProvider } from "@/app/providers";
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
 import { Toaster } from "sonner";

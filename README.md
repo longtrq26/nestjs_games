@@ -33,14 +33,8 @@ PORT=3001 # Or any desired port for the server
 DATABASE_URL="postgresql://<user>:<password>@<host>:<port>/<database>?schema=public"
 JWT_ACCESS_TOKEN_SECRET=<your-access-token-secret>
 JWT_ACCESS_TOKEN_EXPIRATION_TIME=1h
-JWT_REFRESH_TOKEN_SECRET=<your-refresh-token-secret>
 JWT_REFRESH_TOKEN_EXPIRATION_TIME=7d
 ```
-
-> 🔒 **Note:**
->
-> - `DATABASE_URL`: Configure this with your PostgreSQL connection string.
-> - `JWT_*_SECRET`: Use strong, secure, and unique secrets.
 
 ### Database Migration
 

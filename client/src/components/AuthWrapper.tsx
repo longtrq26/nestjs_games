@@ -1,8 +1,8 @@
 "use client";
 
 import { useGetMeQuery } from "@/state/api/authApi";
-import { logout, setUserAndAuthenticate } from "@/state/redux/slices/authSlice";
-import { AppDispatch, persistor, RootState } from "@/state/redux/store";
+import { logout, setUserAndAuthenticate } from "@/state/slices/authSlice";
+import { AppDispatch, persistor, RootState } from "@/state/store";
 import { usePathname, useRouter } from "next/navigation";
 import React, { ReactNode, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";

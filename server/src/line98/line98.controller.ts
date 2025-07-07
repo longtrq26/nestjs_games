@@ -8,9 +8,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Line98Game } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { CurrentUser } from 'src/lib/decorators/current-user.decorator';
-import { Line98GameStatePayload, Line98Response } from 'src/lib/types';
+import {
+  HintMove,
+  Line98GameStatePayload,
+  Line98Response,
+} from 'src/lib/types';
 import { GetHintDto, MoveBallDto } from './dto/line98.dto';
 import { Line98Service } from './line98.service';
 
@@ -20,16 +25,15 @@ export class Line98Controller {
   constructor(private readonly line98Service: Line98Service) {}
 
   @Post('create')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.CREATED)
   async createGame(
     @CurrentUser() user: { userId: string },
-    @Body() _unused: any,
-  ): Promise<Line98Response<{ gameId: string }>> {
-    const game = await this.line98Service.createGame(user.userId);
+  ): Promise<Line98Response<Line98Game>> {
+    const newGame = await this.line98Service.createGame(user.userId);
 
     return {
       message: 'Line 98 game created successfully',
-      data: { gameId: game.id },
+      data: newGame, // <-- THAY ĐỔI: Trả về toàn bộ đối tượng newGame
     };
   }
 
@@ -70,7 +74,7 @@ export class Line98Controller {
   async getHint(
     @CurrentUser() user: { userId: string },
     @Body() getHintDto: GetHintDto,
-  ): Promise<Line98Response<{ hint: any } | null>> {
+  ): Promise<Line98Response<HintMove | null>> {
     const hint = await this.line98Service.getHint(
       getHintDto.gameId,
       user.userId,
@@ -85,7 +89,7 @@ export class Line98Controller {
 
     return {
       message: 'Optimal move hint',
-      data: { hint },
+      data: hint,
     };
   }
 }

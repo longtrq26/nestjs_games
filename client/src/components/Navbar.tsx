@@ -3,8 +3,8 @@
 import { closeTicTacToeSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 import { useLogoutMutation } from "@/state/api/authApi";
-import { logout } from "@/state/redux/slices/authSlice";
-import { AppDispatch, RootState } from "@/state/redux/store";
+import { logout } from "@/state/slices/authSlice";
+import { AppDispatch, RootState } from "@/state/store";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";

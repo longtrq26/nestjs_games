@@ -1,102 +1,74 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { RootState } from "../redux/store";
-
-// Định nghĩa kiểu dữ liệu cho Line98 Game State từ backend
-export interface Line98GameStatePayload {
-  gameId: string;
-  boardState: string[]; // Mảng các ký tự màu bóng/trống
-  nextBalls: string[]; // Mảng 3 ký tự màu bóng tiếp theo
-  score: number;
-  status: "IN_PROGRESS" | "FINISHED";
-}
-
-export interface HintMove {
-  from: number;
-  to: number;
-  score: number;
-  type: "clear" | "potential_line" | "movable";
-}
+import type {
+  HintMove,
+  Line98GameStatePayload,
+  Line98Response,
+  Line98Server,
+} from "@/types";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { baseQueryWithReauth } from "./baseQuery";
 
 export const line98Api = createApi({
   reducerPath: "line98Api",
-  baseQuery: fetchBaseQuery({
-    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
-    prepareHeaders: (headers, { getState }) => {
-      const accessToken = (getState() as RootState).auth.accessToken;
-      if (accessToken) {
-        headers.set("Authorization", `Bearer ${accessToken}`);
-      }
-      return headers;
-    },
-  }),
-  tagTypes: ["Line98Game"], // Thêm tag type để quản lý cache
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ["Line98Game"],
   endpoints: (builder) => ({
-    // Endpoint để tạo game Line 98 mới
-    createLine98Game: builder.mutation<
-      { message: string; gameId: string }, // Kiểu trả về
-      void // Không cần body
+    createLine98Game: builder.mutation<Line98Response<Line98Server>, void>({
+      query: () => ({ url: "/line98/create", method: "POST" }),
+      invalidatesTags: ["Line98Game"],
+    }),
+
+    getLine98GameState: builder.query<
+      Line98Response<Line98GameStatePayload>,
+      string
     >({
-      query: () => ({
-        url: "/line98/create",
-        method: "POST",
-        body: {},
-      }),
-      invalidatesTags: ["Line98Game"], // Khi tạo game mới, invalidate cache
-    }),
-
-    // Endpoint để lấy trạng thái game Line 98 theo ID
-    getLine98GameState: builder.query<Line98GameStatePayload, string>({
       query: (gameId) => `/line98/${gameId}`,
-      providesTags: (result, error, id) => [{ type: "Line98Game", id }], // Cung cấp tag cho query
+      providesTags: (res, _err, gameId) =>
+        res?.data ? [{ type: "Line98Game", id: gameId }] : ["Line98Game"],
     }),
 
-    // Endpoint để di chuyển bóng
     moveLine98Ball: builder.mutation<
-      Line98GameStatePayload, // Kiểu trả về (trạng thái game mới)
-      { gameId: string; from: number; to: number } // Kiểu body
+      Line98Response<Line98GameStatePayload>,
+      { gameId: string; from: number; to: number }
     >({
       query: (body) => ({
         url: "/line98/move",
         method: "POST",
-        body: body,
+        body,
       }),
-      // Khi move ball thành công, update lại cache cho game đó
       async onQueryStarted({ gameId }, { dispatch, queryFulfilled }) {
         try {
-          const { data: updatedGame } = await queryFulfilled;
+          const { data } = await queryFulfilled;
           dispatch(
             line98Api.util.updateQueryData(
               "getLine98GameState",
               gameId,
               (draft) => {
-                Object.assign(draft, updatedGame); // Cập nhật trạng thái game trong cache
+                if (draft?.data) Object.assign(draft.data, data.data);
               }
             )
           );
-        } catch (error) {
-          console.error("Failed to update cache after move:", error);
+        } catch (err) {
+          console.error("Failed to patch game cache", err);
         }
       },
-      invalidatesTags: (result, error, { gameId }) => [
+      invalidatesTags: (_, __, { gameId }) => [
         { type: "Line98Game", id: gameId },
       ],
     }),
 
-    // Endpoint để lấy gợi ý nước đi
     getLine98Hint: builder.mutation<
-      { message: string; hint?: HintMove }, // Kiểu trả về
-      { gameId: string } // Kiểu body
+      Line98Response<HintMove | null>,
+      { gameId: string }
     >({
       query: (body) => ({
         url: "/line98/hint",
         method: "POST",
-        body: body,
+        body,
       }),
     }),
   }),
 });
 
-// Export các hooks được tạo tự động
 export const {
   useCreateLine98GameMutation,
   useGetLine98GameStateQuery,

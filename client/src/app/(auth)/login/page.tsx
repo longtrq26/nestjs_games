@@ -12,8 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLoginMutation } from "@/state/api/authApi";
-import { setAuthCredentials } from "@/state/redux/slices/authSlice";
-import { AppDispatch } from "@/state/redux/store";
+import { setAuthCredentials } from "@/state/slices/authSlice";
+import { AppDispatch } from "@/state/store";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

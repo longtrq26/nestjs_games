@@ -1,14 +1,16 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
-import authReducer from "@/state/redux/slices/authSlice";
-import gameReducer from "@/state/redux/slices/gameSlice";
-import { authApi } from "../api/authApi";
 import { persistReducer, persistStore } from "redux-persist";
 import storage from "redux-persist/lib/storage";
-import { line98Api } from "../api/line98Api";
+import { authApi } from "./api/authApi";
+import { line98Api } from "./api/line98Api";
+import authReducer from "./slices/authSlice";
+import line98Reducer from "./slices/line98Slice";
+import ticTacToeReducer from "./slices/ticTacToeSlice";
 
 const rootReducer = combineReducers({
   auth: authReducer,
-  game: gameReducer,
+  ticTacToeGame: ticTacToeReducer,
+  line98Game: line98Reducer,
   [authApi.reducerPath]: authApi.reducer,
   [line98Api.reducerPath]: line98Api.reducer,
 });
@@ -25,7 +27,7 @@ export const store = configureStore({
   reducer: persistedReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: false, // cần thiết khi dùng redux-persist
+      serializableCheck: false,
     }).concat(authApi.middleware, line98Api.middleware),
 });
 

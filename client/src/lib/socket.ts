@@ -1,5 +1,5 @@
-import { logout } from "@/state/redux/slices/authSlice";
-import { store } from "@/state/redux/store";
+import { logout } from "@/state/slices/authSlice";
+import { store } from "@/state/store";
 import { io, Socket } from "socket.io-client";
 
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL;

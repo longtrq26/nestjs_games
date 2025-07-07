@@ -12,31 +12,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useGetMeQuery, useUpdateUserMutation } from "@/state/api/authApi";
-import { setUserAndAuthenticate } from "@/state/redux/slices/authSlice";
-import { AppDispatch, RootState } from "@/state/redux/store";
+import { setUserAndAuthenticate } from "@/state/slices/authSlice";
+import { AppDispatch, RootState } from "@/state/store";
+import { Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 
 const ProfilePage = () => {
   const dispatch: AppDispatch = useDispatch();
-
-  // Lấy thông tin user từ Redux state (được cập nhật bởi AuthWrapper)
   const user = useSelector((state: RootState) => state.auth.user);
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated
   );
 
   // Sử dụng useGetMeQuery để đảm bảo dữ liệu user luôn mới nhất
-  // skip: chỉ fetch nếu user chưa có hoặc không được xác thực
-  const {
-    data: fetchedUser,
-    isLoading: isFetchingUser,
-    isError: isErrorFetchingUser,
-  } = useGetMeQuery(undefined, {
-    skip: !isAuthenticated, // Chỉ fetch nếu đã xác thực
-  });
+  const { data: fetchedUser, isLoading: isFetchingUser } = useGetMeQuery(
+    undefined,
+    {
+      skip: !isAuthenticated,
+    }
+  );
 
   const [username, setUsername] = useState(user?.username || "");
   const [isEditing, setIsEditing] = useState(false);
@@ -52,7 +48,7 @@ const ProfilePage = () => {
     },
   ] = useUpdateUserMutation();
 
-  // Cập nhật state username khi user từ Redux thay đổi
+  // Cập nhật state username khi user thay đổi
   useEffect(() => {
     if (user?.username) {
       setUsername(user.username);
@@ -62,7 +58,8 @@ const ProfilePage = () => {
   // Xử lý khi update thành công
   useEffect(() => {
     if (isUpdateSuccess && fetchedUser) {
-      dispatch(setUserAndAuthenticate(fetchedUser)); // Cập nhật user trong Redux state với dữ liệu mới nhất từ server
+      // Cập nhật user state với dữ liệu mới nhất từ server
+      dispatch(setUserAndAuthenticate(fetchedUser));
       toast("Profile Updated");
       setIsEditing(false);
     }
@@ -70,16 +67,15 @@ const ProfilePage = () => {
 
   // Xử lý khi update thất bại
   useEffect(() => {
-    if (isUpdateError && updateError) {
+    if (isUpdateError) {
       const errorMessage =
-        "data" in updateError
-          ? (updateError.data as any).message
-          : "Failed to update profile";
-      toast("Update Failed");
+        (updateError as any)?.data?.message ||
+        "Failed to update profile. Please try again.";
+      toast.error(errorMessage);
     }
   }, [isUpdateError, updateError, toast]);
 
-  const handleUpdateUsername = async (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
@@ -97,22 +93,23 @@ const ProfilePage = () => {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-64px)] bg-gray-50 p-4">
-      <Card className="w-full max-w-sm border border-gray-200 shadow-xl rounded-lg bg-white">
-        <CardHeader className="text-center pt-8 pb-4">
-          <CardTitle className="text-4xl font-extrabold text-gray-900 tracking-tight">
+    <div className="flex items-center justify-center min-h-[calc(100vh-64px)] px-4 py-12">
+      <Card className="w-full max-w-md bg-white border border-gray-200 shadow-md rounded-2xl">
+        <CardHeader className="text-center pt-8 pb-4 space-y-1">
+          <CardTitle className="text-4xl font-bold text-gray-900">
             Your Profile
           </CardTitle>
-          <CardDescription className="text-md text-gray-600 mt-2">
-            Manage your account details and preferences.
+          <CardDescription className="text-sm text-gray-500">
+            Update your account details
           </CardDescription>
         </CardHeader>
-        <form onSubmit={handleUpdateUsername}>
-          <CardContent className="grid gap-6 px-6 py-4">
-            <div className="grid gap-2">
+
+        <form onSubmit={handleUpdate}>
+          <CardContent className="px-6 py-4 space-y-6">
+            <div className="space-y-2">
               <Label
                 htmlFor="userId"
-                className="text-lg font-medium text-gray-800"
+                className="text-sm font-medium text-gray-700"
               >
                 User ID
               </Label>
@@ -120,42 +117,43 @@ const ProfilePage = () => {
                 id="userId"
                 value={user.id}
                 readOnly
-                className="bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed text-base px-4 py-2"
+                className="text-gray-600 bg-gray-100 cursor-not-allowed border-gray-200 text-base"
               />
             </div>
-            <div className="grid gap-2">
+
+            <div className="space-y-2">
               <Label
                 htmlFor="username"
-                className="text-lg font-medium text-gray-800"
+                className="text-sm font-medium text-gray-700"
               >
                 Username
               </Label>
               <Input
                 id="username"
-                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 readOnly={!isEditing}
                 required
-                className={`text-base px-4 py-2 ${
+                className={`text-base ${
                   isEditing
                     ? "border-gray-300 focus:border-black focus:ring-black"
-                    : "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                    : "bg-gray-100 text-gray-600 cursor-not-allowed border-gray-200"
                 }`}
               />
             </div>
           </CardContent>
+
           <CardFooter className="flex flex-col gap-4 p-6 pt-0">
             {isEditing ? (
               <div className="flex gap-3 w-full">
                 <Button
                   type="submit"
-                  className="flex-1 bg-black text-white hover:bg-gray-800 transition-colors py-3 text-lg font-semibold"
                   disabled={
                     isUpdating ||
-                    username === user.username.trim() ||
-                    username.trim() === ""
+                    username.trim() === "" ||
+                    username.trim() === user.username.trim()
                   }
+                  className="flex-1 bg-black text-white hover:bg-gray-800 text-base font-semibold py-2.5"
                 >
                   {isUpdating ? (
                     <>
@@ -169,12 +167,12 @@ const ProfilePage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1 border-gray-400 text-gray-800 hover:bg-gray-100 transition-colors py-3 text-lg font-semibold"
                   onClick={() => {
+                    setUsername(user.username);
                     setIsEditing(false);
-                    setUsername(user.username); // Reset username if canceled
                   }}
                   disabled={isUpdating}
+                  className="flex-1 text-base font-semibold py-2.5"
                 >
                   Cancel
                 </Button>
@@ -182,8 +180,8 @@ const ProfilePage = () => {
             ) : (
               <Button
                 type="button"
-                className="w-full bg-black text-white hover:bg-gray-800 transition-colors py-3 text-lg font-semibold"
                 onClick={() => setIsEditing(true)}
+                className="w-full bg-black text-white hover:bg-gray-800 text-base font-semibold py-2.5"
               >
                 Edit Username
               </Button>
