@@ -1,3 +1,4 @@
+import { UseGuards } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -5,67 +6,69 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { TicTacToeGameStatus, User } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
-import { TicTacToeService } from './tic-tac-toe.service';
-import { UseGuards } from '@nestjs/common';
-import { TicTacToeGameStatus, User, Prisma } from '@prisma/client';
+import { JwtWsAuthGuard } from 'src/auth/guards/jwt-ws-auth.guard';
+import { GameWithPlayers } from 'src/lib/types';
 import {
   GameOutcomePayload,
   JoinGameDto,
   MakeMoveDto,
   PlayerJoinedPayload,
 } from './dto/tic-tac-toe.dto';
-import { JwtWsAuthGuard } from 'src/auth/guards/jwt-ws-auth.guard';
-
-type GameWithPlayers = Prisma.TicTacToeGameGetPayload<{
-  include: {
-    player1: { select: { username: true } };
-    player2: { select: { username: true } };
-  };
-}>;
+import { SocketToGameService } from './socket-to-game.service';
+import { TicTacToeService } from './tic-tac-toe.service';
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Cho phép mọi origin, bạn nên giới hạn trong môi trường production
+    origin: '*',
     credentials: true,
   },
-  namespace: '/tic-tac-toe', // Namespace riêng cho Tic Tac Toe
+  namespace: '/tic-tac-toe',
 })
 export class TicTacToeGateway {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly ticTacToeService: TicTacToeService) {}
+  constructor(
+    private readonly ticTacToeService: TicTacToeService,
+    private readonly socketToGameService: SocketToGameService,
+  ) {}
 
   async handleConnection(client: Socket) {
-    // Để xác thực JWT qua WebSocket, client cần gửi token trong handshake query hoặc header.
-    // Chúng ta sẽ xử lý việc xác thực này trong JwtWsAuthGuard.
     console.log(`Client connected: ${client.id}`);
   }
 
-  // Xử lý khi client ngắt kết nối
   async handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
-    // TODO: Xử lý trường hợp người chơi rời game giữa chừng, đánh dấu game ABORTED
-    // Bạn có thể tìm game mà người chơi này đang tham gia và cập nhật trạng thái.
-    // Điều này sẽ phức tạp hơn và có thể cần một map tạm thời client.id -> game.id hoặc query database.
-    // Để MVP, chúng ta sẽ bỏ qua logic này.
+    const gameId = this.socketToGameService.get(client.id);
+    const user = client.data.user as User;
+
+    if (gameId && user?.id) {
+      try {
+        await this.ticTacToeService.abortGame(gameId, user.id);
+        this.server.to(gameId).emit('gameAborted', { gameId });
+      } catch (error) {
+        console.error(`Failed to abort game ${gameId} on disconnect:`, error);
+      } finally {
+        this.socketToGameService.delete(client.id);
+      }
+    }
   }
 
-  @UseGuards(JwtWsAuthGuard) // Bảo vệ sự kiện này bằng JWT Guard
+  @UseGuards(JwtWsAuthGuard)
   @SubscribeMessage('createGame')
   async createGame(@ConnectedSocket() client: Socket) {
-    const user = client.data.user as User; // User object từ JWT Guard
-    console.log('[SERVER] Received createGame from', user?.username);
+    const user = client.data.user as User;
 
     const game = await this.ticTacToeService.createGame(user.id);
-    client.join(game.id); // Cho client vào phòng của game này
+    client.join(game.id);
+
+    this.socketToGameService.set(client.id, game.id);
 
     const gameState = await this.ticTacToeService.getGameState(game.id);
 
     client.emit('gameCreated', gameState);
 
-    console.log(`User ${user.username} created game ${game.id}`);
     return {
       event: 'gameCreated',
       data: gameState,
@@ -82,9 +85,6 @@ export class TicTacToeGateway {
         player1Id: game.player1Id,
         player1Username: game.player1.username,
       });
-      console.log(
-        `User ${client.data.user.username} found waiting game ${game.id}`,
-      );
     } else {
       client.emit('noWaitingGame');
       console.log(`User ${client.data.user.username} found no waiting game`);
@@ -107,16 +107,15 @@ export class TicTacToeGateway {
         await this.ticTacToeService.joinGame(data.gameId, user.id);
 
       client.join(game.id);
-      console.log(`User ${user.username} joined game ${game.id}`);
 
-      // ✅ Lấy gameState đầy đủ từ service
+      this.socketToGameService.set(client.id, game.id);
+
       const gameState = await this.ticTacToeService.getGameState(game.id);
 
-      // ✅ Emit playerJoined dùng gameState trực tiếp
       this.server.to(game.id).emit('playerJoined', {
         gameId: gameState.gameId,
-        boardState: gameState.board.join(''), // convert string[] -> string
-        currentPlayer: gameState.currentPlayerSymbol, // dùng đúng tên key
+        boardState: gameState.board.join(''),
+        currentPlayer: gameState.currentPlayerSymbol,
         status: gameState.status,
 
         playerXId:
@@ -137,7 +136,6 @@ export class TicTacToeGateway {
             : playerJoinedPayload.player2Username,
       });
 
-      // 🆗 (Optional) Emit gameState nếu bạn cần client sync toàn bộ
       this.server.to(game.id).emit('gameState', gameState);
 
       return {
@@ -173,7 +171,6 @@ export class TicTacToeGateway {
           data.position,
         );
 
-      // Gửi trạng thái game mới nhất cho tất cả client trong phòng game này
       this.server.to(updatedGame.id).emit('gameState', gameStatePayload);
 
       if (updatedGame.status === TicTacToeGameStatus.FINISHED) {
@@ -185,9 +182,7 @@ export class TicTacToeGateway {
         };
         this.server.to(updatedGame.id).emit('gameFinished', gameOutcomePayload);
       }
-      console.log(
-        `User ${user.username} made move in game ${data.gameId} at position ${data.position}`,
-      );
+
       return {
         event: 'moveMade',
         data: {

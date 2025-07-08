@@ -1,3 +1,4 @@
+import { CellValue, PlayerJoinedPayload, TicTacToeGameState } from "@/types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { BOARD_SIZE, EMPTY_CELL, TOTAL_CELLS } from "./constants";
@@ -7,21 +8,18 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Convert board string to 2D board using dynamic board size
-// export const convertBoardStringTo2D = (boardString?: string): CellValue[][] => {
-//   if (!boardString || boardString.length !== TOTAL_CELLS) {
-//     console.error("Invalid board string:", boardString);
-//     return Array.from({ length: BOARD_SIZE }, () =>
-//       Array(BOARD_SIZE).fill(null)
-//     );
-//   }
-
-//   return Array.from({ length: BOARD_SIZE }, (_, i) =>
-//     Array.from({ length: BOARD_SIZE }, (_, j) => {
-//       const char = boardString[i * BOARD_SIZE + j];
-//       return isValidBallChar(char) ? (char as CellValue) : null;
-//     })
-//   );
-// };
+export function convertBoardStringTo2D(boardStr: string): CellValue[][] {
+  const board: CellValue[][] = [];
+  for (let i = 0; i < 9; i += 3) {
+    board.push(
+      boardStr
+        .slice(i, i + 3)
+        .split("")
+        .map((cell) => (cell === "X" || cell === "O" ? cell : null))
+    );
+  }
+  return board;
+}
 
 // Find path using BFS (client-side)
 export const findPath = (

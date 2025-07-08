@@ -46,17 +46,59 @@ export interface HintMove {
 
 export type CellValue = "X" | "O" | null;
 
+export enum TicTacToeGameStatus {
+  WAITING_FOR_PLAYER = "WAITING_FOR_PLAYER",
+  IN_PROGRESS = "IN_PROGRESS",
+  FINISHED = "FINISHED",
+  ABORTED = "ABORTED",
+}
+
+export enum TicTacToePlayerSymbol {
+  X = "X",
+  O = "O",
+}
+
 export interface TicTacToeGameState {
-  board: CellValue[][];
-  currentPlayer: "X" | "O";
-  winner: "X" | "O" | "Draw" | null;
-  status: "Waiting" | "Playing" | "Finished";
-  playerXId: string | null;
-  playerOId: string | null;
-  playerXUsername: string | null;
-  playerOUsername: string | null;
-  isHost: boolean;
-  roomId: string | null;
   gameId: string | null;
+  board: CellValue[][];
+  currentPlayerSymbol: TicTacToePlayerSymbol | null;
+  winnerSymbol: TicTacToePlayerSymbol | null;
+  status: TicTacToeGameStatus | null;
+  player1Id: string | null;
+  player2Id: string | null;
+  player1Symbol: TicTacToePlayerSymbol | null;
+  player2Symbol: TicTacToePlayerSymbol | null;
+  player1Username: string | null;
+  player2Username: string | null;
+  isHost: boolean;
   message: string | null;
+}
+
+export interface TicTacToeGameStatePayload {
+  gameId: string;
+  board: string[]; // server gửi chuỗi ["X", "", "", ..., "O"]
+  currentPlayerSymbol: TicTacToePlayerSymbol | null;
+  winnerSymbol: TicTacToePlayerSymbol | null;
+  status: TicTacToeGameStatus;
+  player1Id: string;
+  player2Id: string | null;
+  player1Symbol: TicTacToePlayerSymbol;
+  player2Symbol: TicTacToePlayerSymbol;
+}
+
+export interface PlayerJoinedPayload {
+  gameId: string;
+  player1Id: string;
+  player2Id: string;
+  player1Username: string;
+  player2Username: string;
+  player1Symbol: TicTacToePlayerSymbol;
+  player2Symbol: TicTacToePlayerSymbol;
+}
+
+export interface GameOutcomePayload {
+  gameId: string;
+  status: TicTacToeGameStatus;
+  winnerSymbol: TicTacToePlayerSymbol | null;
+  board: string[]; // Flat array from server
 }

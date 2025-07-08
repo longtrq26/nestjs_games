@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
-import { TicTacToeService } from './tic-tac-toe.service';
-import { TicTacToeGateway } from './tic-tac-toe.gateway';
-import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { JwtWsAuthGuard } from 'src/auth/guards/jwt-ws-auth.guard';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { SocketToGameService } from './socket-to-game.service';
+import { TicTacToeGateway } from './tic-tac-toe.gateway';
+import { TicTacToeService } from './tic-tac-toe.service';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
   providers: [
     TicTacToeService,
     TicTacToeGateway,
+    SocketToGameService,
     PrismaService,
     JwtWsAuthGuard,
   ],

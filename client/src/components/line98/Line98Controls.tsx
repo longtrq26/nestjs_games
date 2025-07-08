@@ -1,6 +1,6 @@
 import { MONO_BALL_STYLE_MAP, NEW_BALLS_PER_TURN } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { ClientLine98Game } from "@/types";
+import { Line98Client } from "@/types";
 import React from "react";
 import {
   Card,
@@ -13,7 +13,7 @@ import {
 import Line98ControlButtons from "./Line98ControlButtons";
 
 interface Line98ControlsProps {
-  game: ClientLine98Game | null;
+  game: Line98Client | null;
   isCreatingGame: boolean;
   isGettingHint: boolean;
   onStart: () => void;

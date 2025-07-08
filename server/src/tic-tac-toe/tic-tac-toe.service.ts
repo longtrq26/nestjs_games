@@ -10,34 +10,16 @@ import {
   TicTacToeGameStatus,
   TicTacToePlayerSymbol,
 } from '@prisma/client';
+import { BOARD_SIZE, WINNING_COMBINATIONS } from 'src/lib/constants';
+import { GameWithPlayers } from 'src/lib/types';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GameStatePayload, PlayerJoinedPayload } from './dto/tic-tac-toe.dto';
 
-type GameWithPlayers = Prisma.TicTacToeGameGetPayload<{
-  include: {
-    player1: { select: { username: true } };
-    player2: { select: { username: true } };
-  };
-}>;
-
 @Injectable()
 export class TicTacToeService {
-  private readonly BOARD_SIZE = 9;
-  private readonly WINNING_COMBINATIONS = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8], // Rows
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8], // Columns
-    [0, 4, 8],
-    [2, 4, 6], // Diagonals
-  ];
-
   constructor(private prisma: PrismaService) {}
 
   async createGame(player1Id: string): Promise<TicTacToeGame> {
-    // Kiểm tra xem người chơi này có đang trong game WAITING_FOR_PLAYER nào không
     const existingWaitingGame = await this.prisma.ticTacToeGame.findFirst({
       where: {
         player1Id: player1Id,
@@ -46,12 +28,10 @@ export class TicTacToeService {
     });
 
     if (existingWaitingGame) {
-      // Nếu có, trả về game đó thay vì tạo mới
       return existingWaitingGame;
     }
 
-    // Tạo một bàn cờ trống
-    const initialBoard = '-'.repeat(this.BOARD_SIZE); // Ví dụ: "---------"
+    const initialBoard = '-'.repeat(BOARD_SIZE);
 
     const newGame = await this.prisma.ticTacToeGame.create({
       data: {
@@ -93,7 +73,7 @@ export class TicTacToeService {
       where: { id: gameId },
       include: {
         player1: { select: { username: true } },
-        player2: { select: { username: true } }, // include đầy đủ
+        player2: { select: { username: true } },
       },
     });
 
@@ -205,17 +185,15 @@ export class TicTacToeService {
       throw new BadRequestException('Current player symbol is not set.');
     }
 
-    // Xác định ký hiệu của người chơi hiện tại
     let playerSymbol: TicTacToePlayerSymbol;
     if (game.player1Id === userId) {
-      playerSymbol = game.currentPlayerSymbol; // Người chơi 1 là X hay O phụ thuộc vào lượt hiện tại
+      playerSymbol = game.currentPlayerSymbol;
     } else if (game.player2Id === userId) {
-      playerSymbol = game.currentPlayerSymbol; // Người chơi 2 là X hay O phụ thuộc vào lượt hiện tại
+      playerSymbol = game.currentPlayerSymbol;
     } else {
       throw new BadRequestException('You are not a player in this game.');
     }
 
-    // Lấy ký hiệu của người chơi đến lượt
     const playerSymbolToMove = game.currentPlayerSymbol;
     if (playerSymbol !== playerSymbolToMove) {
       throw new BadRequestException(
@@ -275,14 +253,8 @@ export class TicTacToeService {
       },
     });
 
-    const player1SymbolOnBoard =
-      updatedGame.currentPlayerSymbol === TicTacToePlayerSymbol.X
-        ? TicTacToePlayerSymbol.O
-        : TicTacToePlayerSymbol.X; // Lấy ký hiệu của player1 sau khi đã đổi lượt
-    const player2SymbolOnBoard =
-      player1SymbolOnBoard === TicTacToePlayerSymbol.X
-        ? TicTacToePlayerSymbol.O
-        : TicTacToePlayerSymbol.X;
+    const player1Symbol = updatedGame.player1Symbol;
+    const player2Symbol = updatedGame.player2Symbol;
 
     const gameStatePayload: GameStatePayload = {
       gameId: updatedGame.id,
@@ -291,8 +263,8 @@ export class TicTacToeService {
       status: updatedGame.status,
       player1Id: updatedGame.player1Id,
       player2Id: updatedGame.player2Id,
-      player1Symbol: player1SymbolOnBoard, // Cần xác định lại ký hiệu thực tế của người chơi trên bàn cờ
-      player2Symbol: player2SymbolOnBoard,
+      player1Symbol: player1Symbol, // Cần xác định lại ký hiệu thực tế của người chơi trên bàn cờ
+      player2Symbol: player2Symbol,
       winnerSymbol: updatedGame.winnerSymbol,
     };
 
@@ -308,7 +280,6 @@ export class TicTacToeService {
       throw new NotFoundException('Game not found.');
     }
 
-    // Chỉ cho phép người chơi trong game hủy bỏ
     if (game.player1Id !== userId && game.player2Id !== userId) {
       throw new UnauthorizedException('You are not a player in this game.');
     }
@@ -325,7 +296,7 @@ export class TicTacToeService {
   }
 
   private checkWin(board: string[], player: TicTacToePlayerSymbol): boolean {
-    for (const combination of this.WINNING_COMBINATIONS) {
+    for (const combination of WINNING_COMBINATIONS) {
       const [a, b, c] = combination;
       if (board[a] === player && board[b] === player && board[c] === player) {
         return true;

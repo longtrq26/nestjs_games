@@ -1,24 +1,22 @@
-// src/tic-tac-toe/dto/tic-tac-toe.dto.ts
+import { TicTacToeGameStatus, TicTacToePlayerSymbol } from '@prisma/client';
 import {
-  IsString,
   IsNotEmpty,
-  IsUUID,
   IsNumber,
-  Min,
+  IsString,
+  IsUUID,
   Max,
+  Min,
 } from 'class-validator';
-import { TicTacToePlayerSymbol, TicTacToeGameStatus } from '@prisma/client';
 
-// Interfaces cho các sự kiện gửi đi từ server
 export interface GameStatePayload {
   gameId: string;
-  board: string[]; // Mảng 9 phần tử, ví dụ: ['X', '-', 'O', ...]
+  board: string[];
   currentPlayerSymbol: TicTacToePlayerSymbol | null;
   status: TicTacToeGameStatus;
   player1Id: string;
   player2Id: string | null;
-  player1Symbol: TicTacToePlayerSymbol | null; // X or O for player1
-  player2Symbol: TicTacToePlayerSymbol | null; // X or O for player2
+  player1Symbol: TicTacToePlayerSymbol | null;
+  player2Symbol: TicTacToePlayerSymbol | null;
   winnerSymbol: TicTacToePlayerSymbol | null;
 }
 
@@ -26,10 +24,10 @@ export interface PlayerJoinedPayload {
   gameId: string;
   player1Id: string;
   player2Id: string;
-  player1Username: string; // Tên của người chơi 1
-  player2Username: string; // Tên của người chơi 2
-  player1Symbol: TicTacToePlayerSymbol; // Ký hiệu của người chơi 1
-  player2Symbol: TicTacToePlayerSymbol; // Ký hiệu của người chơi 2
+  player1Username: string;
+  player2Username: string;
+  player1Symbol: TicTacToePlayerSymbol;
+  player2Symbol: TicTacToePlayerSymbol;
 }
 
 export interface GameOutcomePayload {
@@ -39,7 +37,6 @@ export interface GameOutcomePayload {
   board: string[];
 }
 
-// DTO cho các sự kiện nhận từ client (Validation)
 export class JoinGameDto {
   @IsString()
   @IsNotEmpty()

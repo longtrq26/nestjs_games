@@ -21,10 +21,15 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, unknown> = async (
 ) => {
   let result = await baseQuery(args, api, extraOptions);
 
-  if (result.error?.status === 401) {
+  if (
+    result.error &&
+    (result.error.status === 401 || result.error.status === 403)
+  ) {
     const refreshToken = (api.getState() as RootState).auth.refreshToken;
+
     if (!refreshToken) {
       api.dispatch(logout());
+      localStorage.removeItem("persist:root");
       return result;
     }
 
@@ -39,11 +44,20 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, unknown> = async (
     );
 
     if (refreshResult.data) {
-      const { accessToken, refreshToken, user } = refreshResult.data as any;
-      api.dispatch(setAuthCredentials({ accessToken, refreshToken, user }));
+      const { accessToken, refreshToken, user } = refreshResult.data as {
+        accessToken: string;
+        refreshToken: string;
+        user: { id: string; username: string };
+      };
 
-      // retry original query
-      result = await baseQuery(args, api, extraOptions);
+      if (accessToken && refreshToken && user) {
+        api.dispatch(setAuthCredentials({ accessToken, refreshToken, user }));
+
+        result = await baseQuery(args, api, extraOptions);
+      } else {
+        api.dispatch(logout());
+        localStorage.removeItem("persist:root");
+      }
     } else {
       api.dispatch(logout());
       localStorage.removeItem("persist:root");

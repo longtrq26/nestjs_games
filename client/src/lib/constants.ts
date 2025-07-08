@@ -16,3 +16,15 @@ export const MONO_BALL_STYLE_MAP: Record<string, string> = {
   M: "from-fuchsia-400 to-fuchsia-600",
   default: "from-gray-400 to-gray-600",
 };
+
+export const TicTacToeEvents = {
+  CREATE_GAME: "createGame",
+  GAME_CREATED: "gameCreated",
+  JOIN_GAME: "joinGame",
+  PLAYER_JOINED: "playerJoined",
+  GAME_STATE: "gameState",
+  MAKE_MOVE: "makeMove",
+  GAME_FINISHED: "gameFinished",
+  ERROR: "error",
+  PLAYER_LEFT: "playerLeft",
+};

@@ -1,14 +1,15 @@
+// src/components/TicTacToeBoard.tsx
 "use client";
 
 import { cn } from "@/lib/utils";
-import { CellValue } from "@/state/redux/slices/gameSlice";
+import { CellValue, TicTacToeGameStatus } from "@/types"; // Import TicTacToeGameStatus
 import { Fragment } from "react";
 
 interface TicTacToeBoardProps {
   board: CellValue[][];
   onCellClick: (row: number, col: number) => void;
   isCurrentPlayerTurn: boolean;
-  gameStatus: "waiting" | "playing" | "finished";
+  gameStatus: "waiting" | "playing" | "finished"; // Giữ nguyên type này để tránh thay đổi quá nhiều component
 }
 
 const TicTacToeBoard = ({

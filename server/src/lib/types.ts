@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 export const safeUserSelect = {
   id: true,
   username: true,
@@ -8,6 +10,13 @@ export const safeUserSelect = {
 export type BoardCell = string;
 
 export type GameBoard = BoardCell[];
+
+export type GameWithPlayers = Prisma.TicTacToeGameGetPayload<{
+  include: {
+    player1: { select: { username: true } };
+    player2: { select: { username: true } };
+  };
+}>;
 
 export enum BallColor {
   Red = 'R',

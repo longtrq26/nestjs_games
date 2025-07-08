@@ -10,6 +10,17 @@ export const PASSWORD_MIN_LENGTH = 6;
 export const PASSWORD_MAX_LENGTH = 128;
 
 export const BOARD_SIZE = 9;
+export const WINNING_COMBINATIONS = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
+];
+
 export const TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE;
 export const EMPTY_CELL: BoardCell = '-';
 export const BALL_COLORS: BallColor[] = Object.values(BallColor);

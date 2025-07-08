@@ -1,3 +1,4 @@
+// src/components/GameControls.tsx
 "use client";
 
 import { useState } from "react";
@@ -14,29 +15,29 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 
 interface GameControlsProps {
+  gameId: string | null; // Thêm dòng này
   onHostGame: () => void;
-  onJoinGame: (roomId: string) => void;
+  onJoinGame: (roomIdToJoin: string) => void;
   onLeaveGame: () => void;
   onRematch: () => void;
-  isGameWaiting: boolean;
-  isGameFinished: boolean;
-  isHost: boolean;
-  roomId: string | null;
   gameStatus: "waiting" | "playing" | "finished";
+  isHost: boolean;
 }
 
 const GameControls = ({
+  gameId, // Thay thế roomId bằng gameId
   onHostGame,
   onJoinGame,
   onLeaveGame,
   onRematch,
-  isGameWaiting,
-  isGameFinished,
+  gameStatus, // Giữ nguyên gameStatus
   isHost,
-  roomId,
-  gameStatus,
 }: GameControlsProps) => {
   const [joinRoomId, setJoinRoomId] = useState("");
+
+  // Thay thế isGameWaiting và isGameFinished bằng logic dựa trên gameStatus
+  const isGameWaiting = gameStatus === "waiting";
+  const isGameFinished = gameStatus === "finished";
 
   return (
     <Card className="w-full max-w-sm mx-auto bg-white border border-gray-200 shadow-lg rounded-xl p-6">
@@ -49,24 +50,24 @@ const GameControls = ({
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6">
-        {roomId ? (
+        {gameId ? ( // Sử dụng gameId thay vì roomId
           <>
             <div className="text-center bg-gray-100 p-3 rounded-md border border-gray-200">
               <p className="text-lg font-semibold text-gray-800">
                 Room ID:{" "}
                 <span className="text-blue-600 font-extrabold tracking-wide">
-                  {roomId}
+                  {gameId} {/* Sử dụng gameId thay vì roomId */}
                 </span>
               </p>
             </div>
 
-            {gameStatus === "waiting" && (
+            {isGameWaiting && (
               <p className="text-center text-base text-gray-600 animate-pulse">
                 Waiting for an opponent to join...
               </p>
             )}
 
-            {gameStatus === "playing" && (
+            {gameStatus === "playing" && ( // Có thể dùng gameStatus trực tiếp
               <p className="text-center text-base text-gray-600">
                 Game in progress. Good luck!
               </p>
