@@ -1,9 +1,15 @@
 "use client";
 
-import GameControls from "@/components/GameControls";
 import TicTacToeBoard from "@/components/tictactoe/TicTacToeBoard";
+import TicTacToeControls from "@/components/tictactoe/TicTacToeControls";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useTicTacToeGames } from "@/hooks/useTicTacToeGames";
 import { useTicTacToeSocketHandlers } from "@/hooks/useTicTacToeSocketHandlers";
 import { RootState } from "@/state/store";
@@ -11,10 +17,8 @@ import { TicTacToeGameStatus, TicTacToePlayerSymbol } from "@/types";
 import { useSelector } from "react-redux";
 
 const TicTacToePage = () => {
-  // 👇 Setup Socket.IO listeners
   useTicTacToeSocketHandlers();
 
-  // 👇 Game actions: host/join/move/leave...
   const {
     handleHostGame,
     handleJoinGame,
@@ -24,7 +28,6 @@ const TicTacToePage = () => {
     isMyTurn,
   } = useTicTacToeGames();
 
-  // 👇 Redux state
   const {
     gameId,
     board,
@@ -42,20 +45,19 @@ const TicTacToePage = () => {
   const safeStatus: TicTacToeGameStatus =
     status ?? TicTacToeGameStatus.WAITING_FOR_PLAYER;
 
-  // --- UI: Game Status Message ---
   const renderGameStatus = () => {
     if (!gameId) {
       return (
-        <p className="text-xl text-gray-600">
-          Ready to play? Host or Join a game!
+        <p className="text-lg text-gray-400">
+          Ready to play? Host or join a game.
         </p>
       );
     }
 
-    if (status === TicTacToeGameStatus.WAITING_FOR_PLAYER) {
+    if (safeStatus === TicTacToeGameStatus.WAITING_FOR_PLAYER) {
       return (
-        <p className="text-xl text-yellow-600 animate-pulse">
-          {message || "Waiting for an opponent..."}
+        <p className="text-yellow-400 animate-pulse">
+          {message || "Waiting for opponent..."}
         </p>
       );
     }
@@ -73,10 +75,8 @@ const TicTacToePage = () => {
           : null;
 
       return (
-        <p className="text-3xl font-bold text-green-700">
-          {winnerSymbol
-            ? `${winnerName || "Unknown Player"} wins!`
-            : "It's a Draw!"}
+        <p className="text-green-400 text-2xl font-semibold">
+          {winnerSymbol ? `${winnerName || "Unknown"} wins!` : "It's a draw!"}
         </p>
       );
     }
@@ -86,19 +86,19 @@ const TicTacToePage = () => {
 
     return (
       <div className="text-center">
-        <p className="text-2xl font-semibold">
+        <p className="text-xl font-medium text-white">
           Turn:{" "}
           <span
             className={
               currentPlayerSymbol === TicTacToePlayerSymbol.X
-                ? "text-red-600"
-                : "text-blue-600"
+                ? "text-red-500"
+                : "text-blue-500"
             }
           >
             {currentUsername || "Unknown"} ({currentPlayerSymbol})
           </span>
         </p>
-        <p className="text-lg text-gray-600">
+        <p className="text-sm text-gray-400">
           {isMyTurn ? "Your turn!" : "Opponent's turn!"}
         </p>
       </div>
@@ -106,86 +106,90 @@ const TicTacToePage = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] p-6 bg-gray-50">
-      <h1 className="text-5xl font-extrabold mb-10 text-gray-900 tracking-tight">
-        Cờ Caro <span className="text-black">X O</span>
-      </h1>
+    <div className="min-h-[calc(100vh-64px)] p-6 font-sans flex flex-col items-center justify-start">
+      <section className="flex flex-col md:flex-row gap-8 w-full max-w-6xl">
+        {/* Game Board & Info */}
+        <div className="flex-1">
+          <Card className="shadow-2xl bg-[#101828] border border-gray-200 rounded-2xl">
+            <CardHeader className="text-center pt-8 pb-4">
+              <CardTitle className="text-3xl font-extrabold text-gray-900">
+                Tic Tac Toe
+              </CardTitle>
+              <CardDescription className="text-gray-600 mt-1 text-base">
+                {renderGameStatus()}
+              </CardDescription>
+            </CardHeader>
 
-      <div className="flex flex-col md:flex-row items-stretch gap-10 w-full max-w-6xl">
-        <div className="flex-1 flex flex-col items-center">
-          <Card className="p-6 w-full max-w-md mb-8 bg-white border border-gray-200 shadow-md rounded-xl text-center">
-            <CardContent className="flex flex-col items-center justify-center gap-4">
-              {renderGameStatus()}
-              <div className="flex justify-between w-full mt-2 text-gray-700 text-lg font-medium">
-                <p className="px-2 py-1 rounded-md bg-gray-100">
-                  Player X:{" "}
-                  <span className="text-red-500">
-                    {player1Symbol === TicTacToePlayerSymbol.X
+            <CardContent className="px-6 pb-6">
+              <div className="flex justify-between text-md text-gray-800 font-semibold mb-6">
+                <div className="px-3 py-1 rounded bg-gray-100 border">
+                  X:{" "}
+                  <span className="text-red-600 font-bold">
+                    {player1Symbol === "X"
                       ? player1Username || "Waiting..."
                       : player2Username || "Waiting..."}
                   </span>
-                </p>
-                <p className="px-2 py-1 rounded-md bg-gray-100">
-                  Player O:{" "}
-                  <span className="text-blue-500">
-                    {player1Symbol === TicTacToePlayerSymbol.O
+                </div>
+                <div className="px-3 py-1 rounded bg-gray-100 border">
+                  O:{" "}
+                  <span className="text-blue-600 font-bold">
+                    {player1Symbol === "O"
                       ? player1Username || "Waiting..."
                       : player2Username || "Waiting..."}
                   </span>
-                </p>
+                </div>
               </div>
+
+              <div className="w-full flex justify-center">
+                <TicTacToeBoard
+                  board={board}
+                  onCellClick={handleCellClick}
+                  isCurrentPlayerTurn={isMyTurn}
+                  gameStatus={
+                    status === TicTacToeGameStatus.IN_PROGRESS
+                      ? "playing"
+                      : status === TicTacToeGameStatus.FINISHED ||
+                        status === TicTacToeGameStatus.ABORTED
+                      ? "finished"
+                      : "waiting"
+                  }
+                />
+              </div>
+
+              {(safeStatus === "FINISHED" || safeStatus === "ABORTED") && (
+                <div className="mt-8 text-center">
+                  <Button
+                    onClick={handleLeaveGame}
+                    className="bg-black text-white hover:bg-gray-800 transition-colors px-6 py-3 text-lg font-semibold"
+                  >
+                    Play Another Game
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          <TicTacToeBoard
-            board={board}
-            onCellClick={handleCellClick}
-            isCurrentPlayerTurn={isMyTurn}
-            gameStatus={
-              status === TicTacToeGameStatus.IN_PROGRESS
-                ? "playing"
-                : status === TicTacToeGameStatus.FINISHED ||
-                  status === TicTacToeGameStatus.ABORTED
-                ? "finished"
-                : "waiting"
-            }
-          />
-
-          {[TicTacToeGameStatus.FINISHED, TicTacToeGameStatus.ABORTED].includes(
-            safeStatus
-          ) && (
-            <div className="mt-8">
-              <Button
-                onClick={handleLeaveGame}
-                className="bg-black text-white hover:bg-gray-800 transition-colors py-3 px-6 text-lg font-semibold"
-              >
-                Play Another Game
-              </Button>
-            </div>
-          )}
         </div>
 
-        <div className="md:w-1/3 w-full">
-          <GameControls
-            gameId={gameId}
-            onHostGame={handleHostGame}
-            onJoinGame={handleJoinGame}
-            onLeaveGame={handleLeaveGame}
-            onRematch={handleRematch}
-            gameStatus={
-              safeStatus === TicTacToeGameStatus.IN_PROGRESS
-                ? "playing"
-                : [
-                    TicTacToeGameStatus.FINISHED,
-                    TicTacToeGameStatus.ABORTED,
-                  ].includes(safeStatus)
-                ? "finished"
-                : "waiting"
-            }
-            isHost={isHost}
-          />
-        </div>
-      </div>
+        {/* Game Controls */}
+        <TicTacToeControls
+          gameId={gameId}
+          onHostGame={handleHostGame}
+          onJoinGame={handleJoinGame}
+          onLeaveGame={handleLeaveGame}
+          onRematch={handleRematch}
+          gameStatus={
+            safeStatus === TicTacToeGameStatus.IN_PROGRESS
+              ? "playing"
+              : [
+                  TicTacToeGameStatus.FINISHED,
+                  TicTacToeGameStatus.ABORTED,
+                ].includes(safeStatus)
+              ? "finished"
+              : "waiting"
+          }
+          isHost={isHost}
+        />
+      </section>
     </div>
   );
 };
